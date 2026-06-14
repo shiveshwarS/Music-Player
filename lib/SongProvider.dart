@@ -100,7 +100,8 @@ class SongProvider extends ChangeNotifier{
     curartist = songs![index!].author;
     curr = Duration.zero;
     currart = songs![index!].albumlink!;
-    isliked = (Hive.box("favourite").get(0,defaultValue: <String>[]) as List<String>).contains(curname!);
+    final fav = Hive.box("favourite").get(0,defaultValue: <String>[]);
+    isliked = fav is List ? fav.cast<String>().contains(curname!) : false;
   }
 
   void notify(){

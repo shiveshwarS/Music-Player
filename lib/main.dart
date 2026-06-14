@@ -14,10 +14,10 @@ import "package:hertzz/SongProvider.dart";
 import "package:palette_generator/palette_generator.dart";
 import "package:provider/provider.dart";
 import 'AudioController.dart';
-import 'package:audio_service/audio_service.dart';
 
 late final MyAudioHandler _audiohandler;
 
+String fixDropboxUrl(String url) => url.replaceFirst("www.dropbox.com", "dl.dropboxusercontent.com");
 
 class home extends StatelessWidget{
   List<ads.AudioModel>? songs;
@@ -25,7 +25,7 @@ class home extends StatelessWidget{
 
   @override
   Widget build(BuildContext context) {
-    List<String> l = Hive.box("favourite").get(0,defaultValue: <String>[]);
+    List<String> l = List<String>.from(Hive.box("favourite").get(0,defaultValue: <String>[]) ?? []);
     var s = Provider.of<SongProvider>(context);
     var t = Provider.of<tabProvider>(context,listen: false);
     // TODO: implement build
@@ -174,20 +174,22 @@ void main()async{
   await Hive.openBox("playlist");
   await Hive.openBox("favourite");
   WidgetsBinding w = WidgetsFlutterBinding.ensureInitialized();
-  FlutterNativeSplash.preserve(widgetsBinding: w);
+  if (!kIsWeb) {
+    FlutterNativeSplash.preserve(widgetsBinding: w);
+  }
 
-  _audiohandler = await AudioService.init(
-      builder: () => MyAudioHandler(),
-      config: const AudioServiceConfig(
-        androidStopForegroundOnPause: false,
-        androidNotificationIcon: 'drawable/notif',
-        androidNotificationChannelId: 'com.hertzz.player',
-        androidNotificationChannelName: 'Music Playback',
-      ),
-    );
+  _audiohandler = await MyAudioHandler.init();
+  final designSize = kIsWeb
+      ? Size(
+          w.platformDispatcher.views.first.physicalSize.width /
+              w.platformDispatcher.views.first.devicePixelRatio,
+          w.platformDispatcher.views.first.physicalSize.height /
+              w.platformDispatcher.views.first.devicePixelRatio,
+        )
+      : const Size(360, 690);
   runApp(ScreenUtilInit(
     useInheritedMediaQuery: true,
-    designSize: const Size(360,690),
+    designSize: designSize,
     builder: (context, child) {
       ScreenUtil.configure(data: MediaQuery.of(context));
       return HomePage();
@@ -346,7 +348,7 @@ class _MusicTileState extends State<MusicTile> {
             padding:  EdgeInsets.all(4.r),
             child: Row(
               children: [
-                SizedBox(height: 40.r,width: 40.r,child: ClipRRect(borderRadius: BorderRadius.circular(7.r),child: (widget.art!=null)?Image.network(widget.art!,fit: BoxFit.cover,):Icon(Icons.music_note_rounded))),
+                SizedBox(height: 40.r,width: 40.r,child: ClipRRect(borderRadius: BorderRadius.circular(7.r),child: (widget.art!=null)?Image.network(fixDropboxUrl(widget.art!),fit: BoxFit.cover,):Icon(Icons.music_note_rounded))),
                 SizedBox(width: 7.w,),
                 Expanded(child: SizedBox(
                   height: 45.r,
@@ -510,7 +512,8 @@ class _horlisState extends State<horlis> {
     if(name == "Favourites"){
       List<String>? names;
       await Hive.openBox(name);
-      names = Hive.box("favourite").get(0);
+      final raw2 = Hive.box("favourite").get(0);
+      names = raw2 is List ? List<String>.from(raw2) : null;
       res = await ads.AudioService.fetchlPlayList(names!);
       res.sort((a,b){
         return names!.indexOf(a.name!).compareTo(names.indexOf(b.name!));
@@ -548,7 +551,7 @@ class _horlisState extends State<horlis> {
                                   child: Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
-                                      SizedBox(height: 90.r,child: ClipRRect(borderRadius: BorderRadius.circular(10.r),child: (widget.names[index][0]=="Favourites")?Image.asset("assets/fav_img.png",fit: BoxFit.contain,):Image.network(widget.names[index][1],fit: BoxFit.contain,))),
+                                      SizedBox(height: 90.r,child: ClipRRect(borderRadius: BorderRadius.circular(10.r),child: (widget.names[index][0]=="Favourites")?Image.asset("assets/fav_img.png",fit: BoxFit.contain,):Image.network(fixDropboxUrl(widget.names[index][1]),fit: BoxFit.contain,))),
                                       Expanded(
                                         child: Row(
                                           mainAxisAlignment: ((widget.names[index][0]=="Favourites"))?MainAxisAlignment.spaceEvenly:MainAxisAlignment.center,
@@ -653,6 +656,7 @@ class _PlayBarState extends State<PlayBar> {
     _audiohandler.pause();
     s.max = await _audiohandler.setSource(s.songs![s.index!]);
     if(s.index==ind%s.songs!.length)_audiohandler.play();
+    isloading = false;
     s.notify();
     }catch(_){
     }
@@ -667,6 +671,7 @@ class _PlayBarState extends State<PlayBar> {
     _audiohandler.playingStream.listen((onData){
       if(onData == true){
         play = Icons.pause_rounded;
+        isloading = false;
       }else{
         play = Icons.play_arrow_rounded;
       }
@@ -680,7 +685,9 @@ class _PlayBarState extends State<PlayBar> {
     .listen((stat)async {
       var s = Provider.of<SongProvider>(context,listen: false);
     if(stat == ProcessingState.loading){
-      isloading = true;
+      if (!_audiohandler.playing) {
+        isloading = true;
+      }
       if (isopen && ss!=null) {
         ss!((){}); 
     }
@@ -714,6 +721,7 @@ class _PlayBarState extends State<PlayBar> {
   });
   _audiohandler.positionStream.listen((d)async {
     if(seeking)return;
+    isloading = false;
     if (mounted) {
         Provider.of<SongProvider>(context,listen: false).curr = d;
       if (isopen && ss!=null) {
@@ -751,6 +759,7 @@ bool done = false;
     SongProvider s = Provider.of<SongProvider>(context,listen: false);
     s.setIndex(0);
     _audiohandler.setSource(s.songs![0]);
+    isloading = false;
   }
 
   @override
@@ -768,7 +777,7 @@ bool done = false;
     }else{
       await _audiohandler.play();
     }
-
+    isloading = false;
   }
 
   int index = 0;
@@ -845,9 +854,9 @@ bool done = false;
                                     )]),
                                     height: 300.r,
                                     width: 300.r,
-                                                                  child:ClipRRect(borderRadius: BorderRadius.circular(10),child: (s.currart!=null)?Image.network(s.songs![index].albumlink!,fit: BoxFit.contain,frameBuilder: (context, child, frame, wasSynchronouslyLoaded) => (wasSynchronouslyLoaded&&frame!=null)
-                                                                  ?child
-                                                                  :AnimatedOpacity(opacity: frame == null ? 0 : 1,
+                                                                   child:ClipRRect(borderRadius: BorderRadius.circular(10),child: (s.currart!=null)?Image.network(fixDropboxUrl(s.songs![index].albumlink!),fit: BoxFit.contain,frameBuilder: (context, child, frame, wasSynchronouslyLoaded) => (wasSynchronouslyLoaded&&frame!=null)
+                                                                   ?child
+                                                                   :AnimatedOpacity(opacity: frame == null ? 0 : 1,
                                      duration: const Duration(milliseconds: 500),
                                      child: child,
                                    ),):Icon(Icons.music_note_rounded,size: 350,),)),
@@ -1036,7 +1045,7 @@ bool done = false;
               padding:  EdgeInsets.symmetric(horizontal: 10.w),
               child: Row(
                 children: [
-                  Container(height: 40.r,width: 40.r,child: ClipRRect(borderRadius: BorderRadius.circular(7.r),child: (s.currart!=null)?Image.network(s.currart!,fit: BoxFit.cover,):Icon(Icons.music_note_rounded,))),
+                  Container(height: 40.r,width: 40.r,child: ClipRRect(borderRadius: BorderRadius.circular(7.r),child: (s.currart!=null)?Image.network(fixDropboxUrl(s.currart!),fit: BoxFit.cover,):Icon(Icons.music_note_rounded,))),
                   SizedBox(width: 10.w,),
                   Expanded(child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -1083,7 +1092,8 @@ class _playlistState extends State<playlist> {
     if(play && s.PlayListName == name)return;
     List<String>? names;
     await Hive.openBox(name);
-    names = Hive.box("playlist").get(name);
+    final raw = Hive.box("playlist").get(name);
+    names = raw is List ? List<String>.from(raw) : null;
     if(names == null || names.isEmpty)
     {
       ScaffoldMessenger.of(context).removeCurrentSnackBar();
@@ -1192,7 +1202,7 @@ class _playlistState extends State<playlist> {
                 },
                 child: hoverbox(width: double.infinity,child: Stack(
                   children: [
-                    Opacity(opacity: .7,child: (link!=null)?ClipRRect(borderRadius: BorderRadius.circular(5.r),child: Image.network(link,fit: BoxFit.cover,)):FittedBox(fit: BoxFit.contain,child: Icon(Icons.music_note_rounded,size: 180,))),
+                    Opacity(opacity: .7,child: (link!=null)?ClipRRect(borderRadius: BorderRadius.circular(5.r),child: Image.network(fixDropboxUrl(link),fit: BoxFit.cover,)):FittedBox(fit: BoxFit.contain,child: Icon(Icons.music_note_rounded,size: 180,))),
                     Align(
                       alignment: Alignment.bottomLeft,
                       child: Container(width: double.infinity,height: 35.h,decoration: BoxDecoration(color: Colors.black.withValues(alpha: .5),borderRadius: BorderRadius.vertical(bottom: Radius.circular(5.r))),child: FittedBox(alignment: Alignment.centerLeft,child: Padding(
@@ -1398,7 +1408,7 @@ class _playlistPageState extends State<playlistPage> {
                                       child: ClipRRect(
                                         borderRadius: BorderRadius.circular(10.r),
                                         child: Image.network(
-                                          (t.link!=null)?t.link!:t.songs![0].albumlink!,fit: BoxFit.contain,
+                                          (t.link!=null)?fixDropboxUrl(t.link!):fixDropboxUrl(t.songs![0].albumlink!),fit: BoxFit.contain,
                                           frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
                                             if(wasSynchronouslyLoaded && frame == null){
                                               return child;
@@ -1523,7 +1533,9 @@ load()async{
   pages.add(playlistPage());
   setState(() {
   });
-  FlutterNativeSplash.remove();
+  if (!kIsWeb) {
+    FlutterNativeSplash.remove();
+  }
 }
 
 List<ads.AudioModel>? songs;
@@ -1552,7 +1564,17 @@ PageController fragctr = PageController(initialPage: 1);
   } 
   @override
   Widget build(BuildContext context) {
-    // TODO: implement build
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth > 900) {
+          return _buildWebLayout(context);
+        }
+        return _buildMobileLayout(context);
+      },
+    );
+  }
+
+  Widget _buildMobileLayout(BuildContext context) {
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
@@ -1669,6 +1691,133 @@ PageController fragctr = PageController(initialPage: 1);
     );
   }
 
+  Widget _buildWebLayout(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Container(
+        decoration: BoxDecoration(color: Colors.grey.shade900),
+        child: (songs==null)
+          ? Center(child: CircularProgressIndicator())
+          : ChangeNotifierProvider(
+              create: (context) => tabProvider(),
+              child: ChangeNotifierProvider(
+                create: (context) => SongProvider(songs, Artist),
+                child: Row(
+                children: [
+                  Container(
+                    width: 240,
+                    color: Colors.grey.shade900,
+                    child: SafeArea(
+                      child: Column(
+                        children: [
+                          Padding(
+                            padding: EdgeInsets.symmetric(vertical: 20),
+                            child: Text(
+                              "Music Player",
+                              style: TextStyle(
+                                fontSize: 18,
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontFamily: 'robo',
+                              ),
+                            ),
+                          ),
+                          Container(height: 1, color: Colors.grey.shade800.withOpacity(0.3), margin: EdgeInsets.symmetric(horizontal: 16)),
+                          SizedBox(height: 12),
+                          Expanded(
+                            child: SingleChildScrollView(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _SidebarItem(Icons.home_rounded, "Home", 1),
+                                  _SidebarItem(Icons.search_rounded, "Search", 0),
+                                  _SidebarItem(Icons.playlist_play_rounded, "Playlists", 2),
+                                ],
+                              ),
+                            ),
+                          ),
+                          Consumer<SongProvider>(
+                            builder: (context, s, child) {
+                              return Container(
+                                margin: EdgeInsets.all(12),
+                                padding: EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: Colors.deepOrange.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.music_note_rounded, color: Colors.deepOrange, size: 18),
+                                    SizedBox(width: 6),
+                                    Flexible(
+                                      child: Text(
+                                        s.curname ?? "No song playing",
+                                        style: TextStyle(color: Colors.white70, fontSize: 12),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                          SizedBox(height: 12),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Container(width: 1, color: Colors.grey.shade800.withOpacity(0.3)),
+                  Expanded(
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(maxWidth: 960),
+                        child: SafeArea(
+                          child: Column(
+                            children: [
+                              Expanded(
+                                child: Stack(
+                                  children: [
+                                    Consumer<tabProvider>(
+                                      builder: (context, value, child) {
+                                        if(value.tabindex!=2 && value.playlist){
+                                          value.playlist = false;
+                                        }else if(value.tabindex!=1 && value.extras){
+                                          value.extras = false;
+                                        }
+                                        return AnimatedSwitcher(
+                                          duration: Duration(milliseconds: 800),
+                                          switchInCurve: Curves.fastOutSlowIn,
+                                          switchOutCurve: Curves.fastOutSlowIn,
+                                          child: pages[(value.playlist||value.extras)?3:value.tabindex],
+                                        );
+                                      }
+                                    ),
+                                    Align(
+                                      alignment: Alignment.bottomCenter,
+                                      child: FadeEffect(width: double.infinity, height: 60),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                child: PlayBar(),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            ),
+      ),
+    );
+  }
+
   
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) async{
@@ -1683,5 +1832,38 @@ PageController fragctr = PageController(initialPage: 1);
       // The app is in the background or closed, set the flag
        _audiohandler.stop();
     }
+  }
+}
+
+class _SidebarItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final int index;
+
+  const _SidebarItem(this.icon, this.label, this.index);
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<tabProvider>(
+      builder: (context, tab, child) {
+        final selected = tab.tabindex == index && !tab.playlist && !tab.extras;
+        return Container(
+          color: selected ? Colors.deepOrange.withOpacity(0.15) : Colors.transparent,
+          child: ListTile(
+            leading: Icon(icon, color: selected ? Colors.deepOrange : Colors.white54, size: 22),
+            title: Text(label, style: TextStyle(color: selected ? Colors.white : Colors.white54, fontSize: 14.sp, fontWeight: FontWeight.w500)),
+            selected: selected,
+            onTap: () {
+              tab.tabindex = index;
+              tab.playlist = false;
+              tab.extras = false;
+              tab.notify();
+            },
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 2),
+          ),
+        );
+      },
+    );
   }
 }
