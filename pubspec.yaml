@@ -23,6 +23,7 @@ dependencies:
   palette_generator: ^0.3.3+7
   flutter_native_splash: ^2.4.6
   flutter_screenutil: ^5.9.3
+  url_launcher: ^6.2.5
   
 dev_dependencies:
 

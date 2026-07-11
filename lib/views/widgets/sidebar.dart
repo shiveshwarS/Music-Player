@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:hertzz/viewmodels/navigation_provider.dart';
 import 'package:hertzz/viewmodels/player_provider.dart';
 
@@ -53,6 +54,51 @@ class Sidebar extends StatelessWidget {
                 ),
               ),
             ),
+            Container(
+              height: 1,
+              color: Colors.grey.shade800.withOpacity(0.3),
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+            ),
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Material(
+                color: Colors.deepOrange.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () async {
+                    final uri = Uri.parse(
+                        "https://drive.google.com/file/d/1Vfs6lUtHUsBGX6WxIx8z2LQF8jgpOFXe/view?usp=drivesdk");
+                    if (await canLaunchUrl(uri)) {
+                      await launchUrl(uri, mode: LaunchMode.externalApplication);
+                    }
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 10),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.download_rounded,
+                            color: Colors.deepOrange, size: 22),
+                        const SizedBox(width: 10),
+                        const Expanded(
+                          child: Text(
+                            "Download APK",
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
             Consumer<PlayerProvider>(
               builder: (context, s, child) {
                 return Container(

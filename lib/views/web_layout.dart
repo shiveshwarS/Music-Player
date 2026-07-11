@@ -73,14 +73,14 @@ class WebLayout extends StatelessWidget {
                                   Align(
                                     alignment: Alignment.bottomCenter,
                                     child: FadeEffect(
-                                        width: double.infinity, height: 60),
+                                        width: double.infinity, height: 15),
                                   ),
                                 ],
                               ),
                             ),
                             const Padding(
                               padding: EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 4),
+                                  horizontal: 8, vertical: 0),
                               child: PlayBar(),
                             ),
                           ],
